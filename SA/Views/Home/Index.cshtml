@@ -1,0 +1,280 @@
+﻿@{
+    ViewBag.Title = "Index";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<script src="~/Scripts/canvasjs.min.js"></script>
+<script src="~/Scripts/jquery-1.9.1.min.js"></script>
+@*<script src="~/Scripts/Home.js"></script>*@
+
+<div style="margin-left: auto; margin-right: auto; max-width: 968px;  margin-top:-7px;">
+    <div style="padding:10px; border:solid 0px #FFFFFF;">
+        <h1 style="color:#101d69">User Sentiment Analysis</h1>
+        <button class='press' customitemid="1" customitemname="" style="padding:5px 10px; font-weight:600; border:0px solid #FFF; background:#101d69; color:#FFFFFF; cursor:pointer"> Home </button>
+    </div>
+    
+    <div id="itemIdValue" style="display:none"></div>
+    <!--<button class='load'>load data</button>-->
+    <br />
+    <br />
+
+    <div id="categories"></div>
+    <div id="chartContainer" ></div>
+    <br />
+    <br />
+
+    <div id="itemScatterChart" style="border-top:solid 2px #cfcaca"></div>
+    <div id="reviewData" style="clear:both"></div>
+</div>
+<script type="text/javascript">
+    var currentView = 'Category';
+    $('.press').prop("disabled", true)
+    populateCategories();
+
+    function populateCategories() {
+        $.ajax({
+            url: 'Home/GetCategories',
+            type: 'POST',
+            contentType: 'application/json;',
+            data: JSON.stringify({ id: 0 }),
+            success: function (response) {
+                buildCategoryView(response);
+            },
+            failure: function (error) {
+                alert(error);
+            }
+        });
+    }
+
+    $('.press').click(function () {
+        $('#reviewData').html('');
+        $('#chartContainer').html('');
+        $('#itemScatterChart').html('');
+        if (currentView == 'Category' || currentView == 'Item') {
+            $(this).prop("disabled", true)
+            $(this).html('< Categories')
+            populateCategories();
+        }
+        else {
+            buildChart($(this).attr('customItemName'), $(this).attr('customItemId'));
+        }
+
+        if (currentView == 'Item') {
+            $(this).html('Home')
+        }
+        if (currentView == 'Feature')
+            $(this).html('< Categories')
+    });
+
+    function onClick(e) {
+        $('#itemScatterChart').html('');
+        $('#itemIdValue').html(e.dataPoint.id);
+        var tempCategoryId = $('.press').attr('customItemId');
+        $('.press').html('< ' + $('.press').attr('customItemName'));
+        buildChart(e.dataPoint.label, tempCategoryId, e.dataPoint.id);
+    }
+
+    function onFeatureClick(e) {
+        var tempItemId = $('#itemIdValue').html();
+        var tempFeatureId = e.dataPoint.id;
+        populateReviews(tempItemId, tempFeatureId);
+    }
+
+    function buildItemScatterChart(chartTitle,tempCategoryId) {
+        $.ajax({
+            url: 'Home/GetItemScatterChart',
+            type: 'POST',
+            contentType: 'application/json;',
+            data: JSON.stringify({ categoryId: tempCategoryId }),
+            success: function (response) {
+
+                var htmlBuilder = '';
+                htmlBuilder += '<b> Item </b>';
+                htmlBuilder += '<ol>';
+                    htmlBuilder += '<li>' + response + '</li>';
+                
+                htmlBuilder += '</ol>';
+                var height = 400;
+                $('#itemScatterChart').css("margin-top", (height + 'px'));
+                $('#itemScatterChart').html(htmlBuilder);
+
+                var chartData = [
+                        {
+                            //type: "scatter",
+                            type: "bubble",
+                            dataPoints: response
+                        }
+                ];
+                createScatterChart("itemScatterChart", chartTitle, chartData);
+                $('.canvasjs-chart-credit').html('');
+
+            },
+            failure: function (error) {
+                alert(error);
+            }
+        });
+    }
+
+    function populateReviews(tempItemId, tempFeatureId) {
+        $.ajax({
+            url: 'Home/GetReviews',
+            type: 'POST',
+            contentType: 'application/json;',
+            data: JSON.stringify({ itemId: tempItemId, featureId: tempFeatureId }),
+            success: function (response) {
+                buildReviewList(response);
+            },
+            failure: function (error) {
+                alert(error);
+            }
+        });
+    }
+
+    function buildReviewList(response) {
+        var htmlBuilder = '';
+        htmlBuilder += '<b> Review List </b>';
+        htmlBuilder += '<ol>';
+        for (var i = 0; i < Object.keys(response).length ; i++) {
+            htmlBuilder += '<li class="reviewItem">' + response[i] + '</li>';
+        }
+        htmlBuilder += '</ol>';
+        var height = 400;
+        $('#reviewData').css("margin-top", (height + 'px'));
+        $('#reviewData').html(htmlBuilder);
+    }
+
+    function loadItemChart(label, id)
+    {
+        $('.press').attr('customItemName', label);
+        $('.press').attr('customItemId', id);
+
+        $('.press').html('< Categories');
+        buildChart(label, id);
+        buildItemScatterChart(label, id);
+    }
+    
+
+    function buildChart(chartTitle, categoryId, itemId) {
+        $.ajax({
+            url: 'Home/GetDataPoints',
+            type: 'POST',
+            contentType: 'application/json;',
+            data: JSON.stringify({ categoryId: categoryId, itemId: itemId }),
+            success: function (response) {
+                var clickFunction;
+                if (itemId) {
+                    clickFunction = onFeatureClick;
+                    currentView = 'Feature';
+                    
+                }
+                else {
+                    clickFunction = onClick;
+                    currentView = 'Item';
+                }
+
+                if (response) {
+
+                    var chartData = [{
+                        name: ":)", color: "#27c63e", //"#64FE2E",
+                        showInLegend: true, type: "stackedColumn100", click: clickFunction,
+                        dataPoints: response[0]
+                    },
+                    {
+                        name: ":|", color: "#FACC2E",
+                        showInLegend: true, type: "stackedColumn100", click: clickFunction,
+                        dataPoints: response[1]
+                    },
+                    {
+                        name: ":(", color: "#d12b2b", //"#FA5858",
+                        showInLegend: true, type: "stackedColumn100", click: clickFunction,
+                        dataPoints: response[2]
+                    }];
+                    createChart("chartContainer", chartTitle, chartData);
+                    $('.canvasjs-chart-credit').html('');
+                }
+                else {
+                    alert("Could not recieve the data.");
+                }
+            },
+            failure: function (error) {
+                alert(error);
+            }
+        });
+    }
+
+    function buildCategoryView(response) {
+        var chart = new CanvasJS.Chart("categories", {
+            title: {
+                text: "Categories", horizontalAlign: "left"
+            },
+            axisY: {
+                gridThickness: 0
+            },
+            data: [
+            {
+                type: "bar",
+                click: categoryClicked,
+                dataPoints: response
+            }
+            ]
+        });
+        chart.render();
+        $('.canvasjs-chart-credit').html('');
+        //var htmlBuilder = '';
+        //for (var i = 0; i < Object.keys(response).length ; i++) {
+        //    htmlBuilder += '<a class="categoryLink" id="' + response[i].id + '"  onClick="javascript:loadItemChart( \''+response[i].label+'\', ' + response[i].id + ')">' + response[i].label + '</a><br/><br/>';
+        //}
+        //$('#categories').css('cursor', 'pointer');
+        //$('#categories').html(htmlBuilder);
+        //$('#chartContainer').html('');
+    }
+
+    function categoryClicked(e) {
+        loadItemChart(e.dataPoint.label, e.dataPoint.id)
+    }
+
+    function createChart(chartDivId, chartTitle, chartData) {
+        var chart = new CanvasJS.Chart(chartDivId, {
+            title: { text: chartTitle, horizontalAlign: "left" },
+            axisX: { tickThickness: 0, interval: 1, labelAngle: -30 },
+            animationEnabled: true,
+            interactivityEnabled: true,
+            toolTip: { content: "{label} <br/> {y} users are {name}", shared: false },
+            axisY: { lineThickness: 0, tickThickness: 0, interval: 20 },
+            legend: { verticalAlign: "center", horizontalAlign: "left" },
+            data: chartData
+        });
+        chart.render();
+        $('#categories').html('');
+        $('.press').prop("disabled", false)
+    }
+
+    function createScatterChart(chartDivId, chartTitle, chartData) {
+        var chart = new CanvasJS.Chart(chartDivId, {
+            title: { text: "Cost vs Sentiment vs Popularity", horizontalAlign: "left" },
+            axisX: {
+                title: "Cost",
+                valueFormatString: "#,##0.##",
+                prefix: "$"
+               
+            },
+            axisY: {
+                title: "Sentiment Value",
+                valueFormatString: "#,##0.##",
+                minimum: 0,
+                maximum: 1,
+                gridThickness: 0
+            },
+            animationEnabled: true,
+            interactivityEnabled: true,
+            toolTip: { content: "{label} <br/> Cost: ${x} | Sentiment Value: {y} <br/> Popularity: {popularity}%", shared: false },
+            
+            //legend: { verticalAlign: "bottom", horizontalAlign: "left" },
+            data: chartData
+        });
+        chart.render();
+        $('#categories').html('');
+        $('.press').prop("disabled", false)
+    }
+
+</script>
